@@ -1,0 +1,34 @@
+exercise/
+├── backend/
+│   ├── job_platform/       # Django 專案資料夾
+│   │   ├── __init__.py
+│   │   ├── settings.py
+│   │   ├── urls.py
+│   │   ├── wsgi.py
+│   │   ├── asgi.py
+│   ├── jobs/               # Django 應用程式資料夾
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── apps.py
+│   │   ├── models.py
+│   │   ├── schemas.py
+│   │   ├── api.py
+│   │   ├── migrations/
+│   │   │   └── __init__.py
+│   ├── tests/              # 測試資料夾
+│   │   ├── __init__.py
+│   │   └── test_jobs_api.py (稍後建立)
+│   ├── manage.py           # Django 管理工具
+│   ├── requirements.txt    # 專案依賴
+│   └── README.md           # 專案說明 (稍後建立)
+└── docs/
+
+
+# 執行
+cd /home/eric/code/exercise/backend
+
+source venv/bin/activate && python3 manage.py runserver 8001
+
+source venv/bin/activate && python3 manage.py shell
+
+source backend/venv/bin/activate && export DJANGO_SETTINGS_MODULE=job_platform.settings && python3 -m pytest backend/jobs/tests.py -v
