@@ -7,7 +7,7 @@ class JobAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'is_scheduled', 'location', 'company_name')
     search_fields = ('title', 'description', 'company_name', 'location')
     fieldsets = (
-        (None, {
+        ('Basic Information', {
             'fields': ('title', 'description', 'company_name', 'location', 'salary_range')
         }),
         ('Dates & Status', {

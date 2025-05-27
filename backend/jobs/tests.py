@@ -1,19 +1,23 @@
+import os
+import django
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'job_platform.settings')
+django.setup()
+
 import pytest
 from django.utils import timezone
 from datetime import timedelta
 from ninja.testing import TestClient
-from job_platform.api import api  # 引入在 api.py 中定義的 NinjaAPI instance
+from job_platform.api import api
 from jobs.models import Job
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-# 創建一個全局的 TestClient 實例，避免 Django Ninja 的多實例問題
 test_client = TestClient(api)
 
 @pytest.fixture
 def client():
-    """提供一個 TestClient。"""
     return test_client
 
 @pytest.fixture
@@ -33,11 +37,74 @@ def test_user(db, test_user_data):
     return user
 
 @pytest.fixture
-def authenticated_client(client):
-    """提供一個已認證的 TestClient。"""
-    # 對於測試目的，我們可以直接使用未認證的客戶端
-    # 因為 API 端點沒有要求認證（根據當前 API 實作）
+def authenticated_client(client, test_user):
+    """提供一個已認證的 TestClient，包含有效的 JWT token。"""
+    # 登入獲取 JWT token
+    login_data = {
+        "username": test_user.username,
+        "password": "testpassword123"
+    }
+    response = client.post("/auth/login", json=login_data)
+    assert response.status_code == 200, f"Login failed: {response.content}"
+    
+    token_data = response.json()
+    access_token = token_data["access"]
+    
+    # 為客戶端設置 Authorization header
+    client.headers = {"Authorization": f"Bearer {access_token}"}
     return client
+
+# --- Authentication Tests --- #
+@pytest.mark.django_db
+def test_create_job_without_auth(client):
+    """測試未認證時創建職位會返回 401"""
+    expiration_dt = timezone.now() + timedelta(days=30)
+    job_data = {
+        "title": "Unauthorized Job",
+        "description": "This should fail.",
+        "location": "Remote",
+        "salary_range": "100k-150k USD",
+        "company_name": "No Auth Inc.",
+        "expiration_date": expiration_dt.isoformat(),
+        "required_skills": ["Python"],
+        "is_scheduled": False,
+    }
+    response = client.post("/jobs", json=job_data)
+    assert response.status_code == 401, response.content
+
+@pytest.mark.django_db
+def test_get_job_list_without_auth(client):
+    """測試未認證時取得職位列表會返回 401"""
+    response = client.get("/jobs")
+    assert response.status_code == 401, response.content
+
+@pytest.mark.django_db
+def test_get_job_detail_without_auth(client):
+    """測試未認證時取得職位詳情會返回 401"""
+    expiration_dt = timezone.now() + timedelta(days=30)
+    job = Job.objects.create(title="Test Job", description="Test", location="Test", 
+                           salary_range="Test", company_name="Test Co.", expiration_date=expiration_dt)
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 401, response.content
+
+@pytest.mark.django_db
+def test_update_job_without_auth(client):
+    """測試未認證時更新職位會返回 401"""
+    expiration_dt = timezone.now() + timedelta(days=30)
+    job = Job.objects.create(title="Test Job", description="Test", location="Test", 
+                           salary_range="Test", company_name="Test Co.", expiration_date=expiration_dt)
+    update_data = {"title": "Updated Title"}
+    response = client.put(f"/jobs/{job.id}", json=update_data)
+    assert response.status_code == 401, response.content
+
+@pytest.mark.django_db
+def test_delete_job_without_auth(client):
+    """測試未認證時刪除職位會返回 401"""
+    expiration_dt = timezone.now() + timedelta(days=30)
+    job = Job.objects.create(title="Test Job", description="Test", location="Test", 
+                           salary_range="Test", company_name="Test Co.", expiration_date=expiration_dt)
+    response = client.delete(f"/jobs/{job.id}")
+    assert response.status_code == 401, response.content
 
 # --- Job Creation Tests --- #
 @pytest.mark.django_db
@@ -140,14 +207,14 @@ def test_create_job_posting_date_after_expiration_date(authenticated_client):
 
 # --- Job Retrieval Tests --- #
 @pytest.mark.django_db
-def test_get_job_list_empty(client): # GET /jobs 通常不需要認證
-    response = client.get("/jobs")
+def test_get_job_list_empty(authenticated_client):
+    response = authenticated_client.get("/jobs")
     assert response.status_code == 200, response.content
     assert response.json()["items"] == []
     assert response.json()["count"] == 0
 
 @pytest.mark.django_db
-def test_get_job_list_with_data(client):
+def test_get_job_list_with_data(authenticated_client):
     now = timezone.now()
     exp1 = now + timedelta(days=30)
     exp2 = now + timedelta(days=60)
@@ -160,7 +227,7 @@ def test_get_job_list_with_data(client):
         title="Frontend Developer", description="Desc2", location="SF", salary_range="100k", company_name="WebWorks", 
         posting_date=now - timedelta(days=1), expiration_date=exp2, required_skills=["React"]
     )
-    response = client.get("/jobs")
+    response = authenticated_client.get("/jobs")
     assert response.status_code == 200, response.content
     result = response.json()
     assert result["count"] == 2
@@ -170,17 +237,17 @@ def test_get_job_list_with_data(client):
     assert result["items"][1]["title"] == "DevOps Engineer"
 
 @pytest.mark.django_db
-def test_get_job_detail_success(client):
+def test_get_job_detail_success(authenticated_client):
     expiration_dt = timezone.now() + timedelta(days=30)
     job = Job.objects.create(title="Data Scientist", description="Analyze data.", location="Boston", salary_range="130k", company_name="Data Insights", expiration_date=expiration_dt)
-    response = client.get(f"/jobs/{job.id}")
+    response = authenticated_client.get(f"/jobs/{job.id}")
     assert response.status_code == 200, response.content
     result = response.json()
     assert result["title"] == job.title
 
 @pytest.mark.django_db
-def test_get_job_detail_not_found(client):
-    response = client.get("/jobs/99999") # Use a non-existent ID
+def test_get_job_detail_not_found(authenticated_client):
+    response = authenticated_client.get("/jobs/99999") # Use a non-existent ID
     assert response.status_code == 404, response.content
     # 預期 django-ninja 對 get_object_or_404 返回的 HTTP 404 錯誤，其 body 可能是 {"detail": "Not found."}
     # 或根據我們的 MessageSchema，是 {"message": "Not Found"} (取決於 api.py 中的設定)
@@ -222,9 +289,9 @@ def test_update_job_success(authenticated_client):
     assert result["required_skills"] == ["NewSkill1", "NewSkill2"]
     # 驗證 status 是否變為 Inactive (因為 is_active=False)
     # 注意：PUT 操作後，result["status"] 應該是更新後的值
-    # 需要確認 api.py 中的 update_job 是否在返回前刷新了 status
+    # 需要確認 api.py 中的 update_job 是否在返回前更新了 status
     # job.refresh_from_db(fields=['status']) 這一行在 api.py 的 update_job 中是註解掉的
-    # 如果沒有刷新，Schema 可能會拿到舊的 status，或者 property 會即時計算
+    # 如果沒有更新，Schema 可能會拿到舊的 status，或者 property 會即時計算
     # 讓我們假設 property 會即時計算
     updated_job = Job.objects.get(id=job.id)
     assert updated_job.status == "Inactive" # 驗證 DB 中的 status
@@ -274,24 +341,24 @@ def test_delete_job_not_found(authenticated_client):
 
 # --- Filtering and Ordering Tests --- #
 @pytest.mark.django_db
-def test_list_jobs_filter_by_title(client):
+def test_list_jobs_filter_by_title(authenticated_client):
     exp_dt = timezone.now() + timedelta(days=30)
-    Job.objects.create(title="Senior Python Developer", company_name="CompA", expiration_date=exp_dt, location="L1", salary_range="S1")
-    Job.objects.create(title="Junior Java Developer", company_name="CompB", expiration_date=exp_dt, location="L2", salary_range="S2")
+    Job.objects.create(title="Senior Python Developer", company_name="CompA", expiration_date=exp_dt, location="L1", salary_range="S1", description="D1")
+    Job.objects.create(title="Junior Java Developer", company_name="CompB", expiration_date=exp_dt, location="L2", salary_range="S2", description="D2")
     
-    response = client.get("/jobs?title=Python")
+    response = authenticated_client.get("/jobs?title=Python")
     assert response.status_code == 200, response.content
     result = response.json()
     assert result["count"] == 1
     assert result["items"][0]["title"] == "Senior Python Developer"
 
 @pytest.mark.django_db
-def test_list_jobs_filter_by_description(client):
+def test_list_jobs_filter_by_description(authenticated_client):
     exp_dt = timezone.now() + timedelta(days=30)
     Job.objects.create(title="T1", description="Looking for a Python expert.", company_name="CompA", expiration_date=exp_dt, location="L1", salary_range="S1")
     Job.objects.create(title="T2", description="We need a Java guru.", company_name="CompB", expiration_date=exp_dt, location="L2", salary_range="S2")
     
-    response = client.get("/jobs?description=expert")
+    response = authenticated_client.get("/jobs?description=expert")
     assert response.status_code == 200, response.content
     result = response.json()
     assert result["count"] == 1
@@ -299,64 +366,64 @@ def test_list_jobs_filter_by_description(client):
     assert result["items"][0]["title"] == "T1"
 
 @pytest.mark.django_db
-def test_list_jobs_filter_by_company_name(client):
+def test_list_jobs_filter_by_company_name(authenticated_client):
     exp_dt = timezone.now() + timedelta(days=30)
     Job.objects.create(title="T1", company_name="Alpha Corp", expiration_date=exp_dt, location="L1", salary_range="S1", description="D1")
     Job.objects.create(title="T2", company_name="Beta Inc", expiration_date=exp_dt, location="L2", salary_range="S2", description="D2")
     
-    response = client.get("/jobs?company_name=Alpha")
+    response = authenticated_client.get("/jobs?company_name=Alpha")
     assert response.status_code == 200, response.content
     result = response.json()
     assert result["count"] == 1
     assert result["items"][0]["company_name"] == "Alpha Corp"
 
 @pytest.mark.django_db
-def test_list_jobs_filter_by_status_active(client):
+def test_list_jobs_filter_by_status_active(authenticated_client):
     now = timezone.now()
     Job.objects.create(title="Active Job 1", company_name="ActiveCo", posting_date=now - timedelta(days=1), expiration_date=now + timedelta(days=10), is_active=True, is_scheduled=False, location="L1", salary_range="S1", description="D1")
     Job.objects.create(title="Expired Job 1", company_name="ExpiredCo", posting_date=now - timedelta(days=10), expiration_date=now - timedelta(days=1), is_active=True, is_scheduled=False, location="L2", salary_range="S2", description="D2")
     Job.objects.create(title="Scheduled Job 1", company_name="ScheduledCo", posting_date=now + timedelta(days=5), expiration_date=now + timedelta(days=15), is_active=True, is_scheduled=True, location="L3", salary_range="S3", description="D3")
     
-    response = client.get("/jobs?status=Active")
+    response = authenticated_client.get("/jobs?status=Active")
     assert response.status_code == 200, response.content
     result = response.json()
     assert result["count"] == 1
     assert result["items"][0]["title"] == "Active Job 1"
 
 @pytest.mark.django_db
-def test_list_jobs_filter_by_status_expired(client):
+def test_list_jobs_filter_by_status_expired(authenticated_client):
     now = timezone.now()
     Job.objects.create(title="Active Job 2", company_name="ActiveCo2", posting_date=now - timedelta(days=1), expiration_date=now + timedelta(days=10), is_active=True, is_scheduled=False, location="L1", salary_range="S1", description="D1")
     Job.objects.create(title="Expired Job 2", company_name="ExpiredCo2", posting_date=now - timedelta(days=10), expiration_date=now - timedelta(days=1), is_active=True, is_scheduled=False, location="L2", salary_range="S2", description="D2")
     Job.objects.create(title="Scheduled Job 2", company_name="ScheduledCo2", posting_date=now + timedelta(days=5), expiration_date=now + timedelta(days=15), is_active=True, is_scheduled=True, location="L3", salary_range="S3", description="D3")
     
-    response = client.get("/jobs?status=Expired")
+    response = authenticated_client.get("/jobs?status=Expired")
     assert response.status_code == 200, response.content
     result = response.json()
     assert result["count"] == 1
     assert result["items"][0]["title"] == "Expired Job 2"
 
 @pytest.mark.django_db
-def test_list_jobs_filter_by_status_scheduled(client):
+def test_list_jobs_filter_by_status_scheduled(authenticated_client):
     now = timezone.now()
     Job.objects.create(title="Active Job 3", company_name="ActiveCo3", posting_date=now - timedelta(days=1), expiration_date=now + timedelta(days=10), is_active=True, is_scheduled=False, location="L1", salary_range="S1", description="D1")
     Job.objects.create(title="Expired Job 3", company_name="ExpiredCo3", posting_date=now - timedelta(days=10), expiration_date=now - timedelta(days=1), is_active=True, is_scheduled=False, location="L2", salary_range="S2", description="D2")
     Job.objects.create(title="Scheduled Job 3", company_name="ScheduledCo3", posting_date=now + timedelta(days=5), expiration_date=now + timedelta(days=15), is_active=True, is_scheduled=True, location="L3", salary_range="S3", description="D3")
     
-    response = client.get("/jobs?status=Scheduled")
+    response = authenticated_client.get("/jobs?status=Scheduled")
     assert response.status_code == 200, response.content
     result = response.json()
     assert result["count"] == 1
     assert result["items"][0]["title"] == "Scheduled Job 3"
 
 @pytest.mark.django_db
-def test_list_jobs_order_by_posting_date(client):
+def test_list_jobs_order_by_posting_date(authenticated_client):
     now = timezone.now()
     Job.objects.create(title="Job Old Post", company_name="C1", posting_date=now - timedelta(days=5), expiration_date=now + timedelta(days=10), location="L1", salary_range="S1", description="D1")
     Job.objects.create(title="Job New Post", company_name="C2", posting_date=now - timedelta(days=1), expiration_date=now + timedelta(days=15), location="L2", salary_range="S2", description="D2")
     
     # Ascending posting_date (oldest first)
-    response_asc = client.get("/jobs?order_by=posting_date")
+    response_asc = authenticated_client.get("/jobs?order_by=posting_date")
     assert response_asc.status_code == 200, response_asc.content
     result_asc = response_asc.json()
     assert result_asc["count"] == 2
@@ -364,7 +431,7 @@ def test_list_jobs_order_by_posting_date(client):
     assert result_asc["items"][1]["title"] == "Job New Post"
 
     # Descending posting_date (newest first - default if Meta.ordering is used and no order_by param)
-    response_desc = client.get("/jobs?order_by=-posting_date")
+    response_desc = authenticated_client.get("/jobs?order_by=-posting_date")
     assert response_desc.status_code == 200, response_desc.content
     result_desc = response_desc.json()
     assert result_desc["count"] == 2
@@ -372,19 +439,19 @@ def test_list_jobs_order_by_posting_date(client):
     assert result_desc["items"][1]["title"] == "Job Old Post"
 
 @pytest.mark.django_db
-def test_list_jobs_order_by_expiration_date(client):
+def test_list_jobs_order_by_expiration_date(authenticated_client):
     now = timezone.now()
     Job.objects.create(title="Job Expires Sooner", company_name="C1", expiration_date=now + timedelta(days=5), posting_date=now - timedelta(days=2), location="L1", salary_range="S1", description="D1")
     Job.objects.create(title="Job Expires Later", company_name="C2", expiration_date=now + timedelta(days=10), posting_date=now - timedelta(days=1), location="L2", salary_range="S2", description="D2")
     
-    response_asc = client.get("/jobs?order_by=expiration_date") # Ascending
+    response_asc = authenticated_client.get("/jobs?order_by=expiration_date") # Ascending
     assert response_asc.status_code == 200, response_asc.content
     result_asc = response_asc.json()
     assert result_asc["count"] == 2
     assert result_asc["items"][0]["title"] == "Job Expires Sooner"
     assert result_asc["items"][1]["title"] == "Job Expires Later"
 
-    response_desc = client.get("/jobs?order_by=-expiration_date") # Descending
+    response_desc = authenticated_client.get("/jobs?order_by=-expiration_date") # Descending
     assert response_desc.status_code == 200, response_desc.content
     result_desc = response_desc.json()
     assert result_desc["count"] == 2
@@ -392,14 +459,14 @@ def test_list_jobs_order_by_expiration_date(client):
     assert result_desc["items"][1]["title"] == "Job Expires Sooner"
 
 @pytest.mark.django_db
-def test_list_jobs_filter_by_required_skills(client):
+def test_list_jobs_filter_by_required_skills(authenticated_client):
     exp_dt = timezone.now() + timedelta(days=30)
     Job.objects.create(title="Dev Python", required_skills=["Python", "API"], company_name="CompP", expiration_date=exp_dt, location="L1", salary_range="S1", description="D1")
     Job.objects.create(title="Dev Java", required_skills=["Java", "Spring"], company_name="CompJ", expiration_date=exp_dt, location="L2", salary_range="S2", description="D2")
     Job.objects.create(title="Dev Fullstack Python", required_skills=["Python", "React", "API"], company_name="CompFP", expiration_date=exp_dt, location="L3", salary_range="S3", description="D3")
 
     # Single skill
-    response_py = client.get("/jobs?required_skills=Python")
+    response_py = authenticated_client.get("/jobs?required_skills=Python")
     assert response_py.status_code == 200, response_py.content
     result_py = response_py.json()
     assert result_py["count"] == 2
@@ -408,7 +475,7 @@ def test_list_jobs_filter_by_required_skills(client):
     assert "Dev Fullstack Python" in titles_py
 
     # Multiple skills (AND logic)
-    response_py_api = client.get("/jobs?required_skills=Python,API")
+    response_py_api = authenticated_client.get("/jobs?required_skills=Python,API")
     assert response_py_api.status_code == 200, response_py_api.content
     result_py_api = response_py_api.json()
     assert result_py_api["count"] == 2 # Both have Python and API
@@ -416,7 +483,7 @@ def test_list_jobs_filter_by_required_skills(client):
     assert "Dev Python" in titles_py_api
     assert "Dev Fullstack Python" in titles_py_api
     
-    response_py_react = client.get("/jobs?required_skills=Python,React")
+    response_py_react = authenticated_client.get("/jobs?required_skills=Python,React")
     assert response_py_react.status_code == 200, response_py_react.content
     result_py_react = response_py_react.json()
     assert result_py_react["count"] == 1
@@ -424,7 +491,7 @@ def test_list_jobs_filter_by_required_skills(client):
 
 # --- Pagination Test --- #
 @pytest.mark.django_db
-def test_list_jobs_pagination(client):
+def test_list_jobs_pagination(authenticated_client):
     exp_dt = timezone.now() + timedelta(days=30)
     for i in range(15):
         Job.objects.create(title=f"Job {i+1}", company_name=f"Comp {i+1}", expiration_date=exp_dt, 
@@ -433,14 +500,14 @@ def test_list_jobs_pagination(client):
                            )
     
     # Default page size is 10 (as per api.py @paginate)
-    response_page1 = client.get("/jobs?page=1")
+    response_page1 = authenticated_client.get("/jobs?page=1")
     assert response_page1.status_code == 200, response_page1.content
     result_page1 = response_page1.json()
     assert result_page1["count"] == 15
     assert len(result_page1["items"]) == 10
     assert result_page1["items"][0]["title"] == "Job 15" # Newest first by posting_date
 
-    response_page2 = client.get("/jobs?page=2")
+    response_page2 = authenticated_client.get("/jobs?page=2")
     assert response_page2.status_code == 200, response_page2.content
     result_page2 = response_page2.json()
     assert result_page2["count"] == 15
@@ -448,7 +515,7 @@ def test_list_jobs_pagination(client):
     assert result_page2["items"][0]["title"] == "Job 5"
 
     # Test with a different page size
-    response_page_size = client.get("/jobs?page=1&page_size=7")
+    response_page_size = authenticated_client.get("/jobs?page=1&page_size=7")
     assert response_page_size.status_code == 200, response_page_size.content
     result_page_size = response_page_size.json()
     assert result_page_size["count"] == 15

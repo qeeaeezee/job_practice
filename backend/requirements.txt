@@ -2,8 +2,7 @@ django
 djangorestframework
 django-ninja
 django-ninja-jwt
-# psycopg2-binary  # 如果您選擇使用 PostgreSQL，請取消註解此行
 pytest
 pytest-django
-ruff  # Linter and formatter (選用，但建議)
-python-dotenv # 用於管理環境變數 (選用，但建議)
+ruff
+python-dotenv

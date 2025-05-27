@@ -9,12 +9,13 @@ from django.utils import timezone
 
 from .models import Job
 from .schemas import JobSchema, JobCreateSchema, JobUpdateSchema, MessageSchema, JobFilterSchema, OrderSchema, JobListSchema
+from user_auth.authentication import jwt_auth
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
-@router.post("", response={201: JobSchema, 400: MessageSchema})
+@router.post("", response={201: JobSchema, 400: MessageSchema, 401: MessageSchema}, auth=jwt_auth)
 def create_job(request, payload: JobCreateSchema):
     data = payload.dict()
     
@@ -74,32 +75,42 @@ def create_job(request, payload: JobCreateSchema):
         logger.error(f"Error creating job: {str(e)}")
         return 400, {"message": f"Error creating job: {str(e)}"}
 
-@router.get("", response=List[JobListSchema])
+@router.get("", response=List[JobListSchema], auth=jwt_auth)
 @paginate(PageNumberPagination, page_size=10)
-def list_jobs(request, filters: Query[JobFilterSchema] = Query(JobFilterSchema()), order: Query[OrderSchema] = Query(OrderSchema())):
+def list_jobs(
+    request,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    company_name: Optional[str] = None,
+    location: Optional[str] = None,
+    salary_range: Optional[str] = None,
+    required_skills: Optional[str] = None,
+    status: Optional[str] = None,
+    order_by: Optional[str] = None
+):
     jobs = Job.objects.all()
 
-    if filters.title:
-        jobs = jobs.filter(title__icontains=filters.title)
-    if filters.description:
-        jobs = jobs.filter(description__icontains=filters.description)
-    if filters.company_name:
-        jobs = jobs.filter(company_name__icontains=filters.company_name)
-    if filters.location:
-        jobs = jobs.filter(location__icontains=filters.location)
-    if filters.salary_range:
-        jobs = jobs.filter(salary_range__icontains=filters.salary_range)
-    if filters.required_skills:
-        skills = [skill.strip() for skill in filters.required_skills.split(',') if skill.strip()]
+    if title:
+        jobs = jobs.filter(title__icontains=title)
+    if description:
+        jobs = jobs.filter(description__icontains=description)
+    if company_name:
+        jobs = jobs.filter(company_name__icontains=company_name)
+    if location:
+        jobs = jobs.filter(location__icontains=location)
+    if salary_range:
+        jobs = jobs.filter(salary_range__icontains=salary_range)
+    if required_skills:
+        skills = [skill.strip() for skill in required_skills.split(',') if skill.strip()]
         query = Q()
         for skill in skills:
             query &= Q(required_skills__icontains=skill)
         if query:
             jobs = jobs.filter(query)
 
-    if filters.status:
+    if status:
         now = timezone.now()
-        if filters.status.lower() == "active":
+        if status.lower() == "active":
             # 活躍職位：is_active=True + 過了發布日期(或未設定) + 未過期
             jobs = jobs.filter(
                 Q(is_active=True) &
@@ -107,32 +118,32 @@ def list_jobs(request, filters: Query[JobFilterSchema] = Query(JobFilterSchema()
                 Q(expiration_date__gt=now) &
                 Q(is_scheduled=False)  # 排程職位不能是活躍的
             )
-        elif filters.status.lower() == "expired":
+        elif status.lower() == "expired":
             # 過期職位：過期日期已過
             jobs = jobs.filter(expiration_date__lt=now)
-        elif filters.status.lower() == "scheduled":
+        elif status.lower() == "scheduled":
             # 排程職位：is_scheduled=True + 發布日期在未來
             jobs = jobs.filter(
                 Q(is_scheduled=True) &
                 Q(posting_date__gt=now)
             )
 
-    logger.debug(f"Filtered order_by: {order.dict()}")
-    if order.order_by:
+    logger.debug(f"Filtered order_by: {order_by}")
+    if order_by:
         valid_order_fields = ["posting_date", "-posting_date", "expiration_date", "-expiration_date"]
-        if order.order_by in valid_order_fields:
-            jobs = jobs.order_by(order.order_by)
+        if order_by in valid_order_fields:
+            jobs = jobs.order_by(order_by)
     else:
         jobs = jobs.order_by(*Job._meta.ordering)
 
     return jobs
 
-@router.get("/{job_id}", response={200: JobSchema, 404: MessageSchema})
+@router.get("/{job_id}", response={200: JobSchema, 404: MessageSchema}, auth=jwt_auth)
 def get_job(request, job_id: int):
     job = get_object_or_404(Job, id=job_id)
     return job
 
-@router.put("/{job_id}", response={200: JobSchema, 400: MessageSchema, 404: MessageSchema})
+@router.put("/{job_id}", response={200: JobSchema, 400: MessageSchema, 404: MessageSchema}, auth=jwt_auth)
 def update_job(request, job_id: int, payload: JobUpdateSchema):
     job = get_object_or_404(Job, id=job_id)
     data = payload.dict(exclude_unset=True)
@@ -183,7 +194,7 @@ def update_job(request, job_id: int, payload: JobUpdateSchema):
     job.refresh_from_db() # 確保 status 等 property 在返回前已更新
     return job
 
-@router.delete("/{job_id}", response={204: None, 404: MessageSchema})
+@router.delete("/{job_id}", response={204: None, 404: MessageSchema}, auth=jwt_auth)
 def delete_job(request, job_id: int):
     job = get_object_or_404(Job, id=job_id)
     job.delete()
