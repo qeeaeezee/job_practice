@@ -1,222 +1,266 @@
-# Job Platform Backend API
+# Job Platform
 
-這是一個基於 Django 和 Django Ninja 構建的職位管理平台後端 API。
+This document provides instructions for setting up, running, and developing the Job Platform application, which includes a Django backend API and a Vue.js frontend.
 
-## 🚀 功能特色
+## 🚀 Project Overview
 
-### 核心功能
-- **完整的職位管理 CRUD 操作**
-- **JWT 認證系統**
-- **搜尋和過濾功能**
-- **分頁支援**
-- **職位排程功能**
-- **API 文檔自動生成 (OpenAPI)**
+The Job Platform is a web application designed for managing job postings. It features:
+- A backend API built with Django and Django Ninja for job and user management.
+- A frontend interface built with Vue 3 and Vite.
 
-### 技術棧
-- **框架**: Django 5.2 + Django Ninja
-- **認證**: Django Ninja JWT
-- **資料庫**: SQLite
-- **測試**: Pytest + pytest-django
-- **API 文檔**: OpenAPI (Swagger)
-- **驗證**: Django Ninja Schema
+## 📋 Prerequisites
 
-## 📁 專案目錄架構
+Before you begin, ensure you have the following installed:
 
-```
-exercise/
-├── backend/
-│   ├── job_platform/           # Django 專案主目錄
-│   │   ├── __init__.py
-│   │   ├── settings.py         # Django 設定檔
-│   │   ├── urls.py             # 主路由配置
-│   │   ├── api.py              # API 路由聚合
-│   │   ├── wsgi.py             # WSGI 部署配置
-│   │   └── asgi.py             # ASGI 部署配置
-│   ├── jobs/                   # 職位管理應用程式
-│   │   ├── __init__.py
-│   │   ├── admin.py            # Django Admin 配置
-│   │   ├── apps.py             # 應用程式配置
-│   │   ├── models.py           # 資料模型
-│   │   ├── schemas.py          # API Schema 定義
-│   │   ├── api.py              # 職位相關 API 端點
-│   │   ├── tests.py            # 完整的 API 測試
-│   │   └── migrations/         # 資料庫遷移檔案
-│   │       ├── __init__.py
-│   │       └── 0001_initial.py
-│   ├── user_auth/              # 認證應用程式
-│   │   ├── __init__.py
-│   │   ├── apps.py             # 應用程式配置
-│   │   ├── api.py              # 認證相關 API 端點
-│   │   ├── schemas.py          # 認證 Schema 定義
-│   │   ├── authentication.py   # JWT 認證處理
-│   │   ├── tests.py            # 認證測試
-│   │   └── migrations/         # 資料庫遷移檔案
-│   │       └── __init__.py
-│   ├── manage.py               # Django 管理工具
-│   ├── requirements.txt        # Python 依賴套件
-│   ├── pytest.ini             # Pytest 配置
-│   ├── db.sqlite3              # SQLite 資料庫
-│   └── venv/                   # Python 虛擬環境
-```
-
-## 🛠️ 環境設置
-
-### 系統需求
+**Backend:**
 - Python 3.8+
 - pip
-- virtualenv (建議)
+- virtualenv (recommended)
 
-### 安裝步驟
+**Frontend:**
+- Node.js (which includes npm)
+- [VSCode](https://code.visualstudio.com/) (recommended)
+- [Volar VSCode Extension](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (if using VSCode for Vue development, disable Vetur)
 
-1. **複製專案並進入目錄**
+## ⚙️ Backend Setup & Usage
+
+The backend is a Django application providing a RESTful API for job management.
+
+### Installation
+
+1.  **Navigate to the backend directory:**
+    ```bash
+    cd /home/eric/code/exercise/backend
+    ```
+
+2.  **Create and activate a virtual environment:**
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
+    *(On Windows, use `venv\Scripts\activate`)*
+
+3.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+### Database Migration
+
+Apply database migrations to set up the schema:
 ```bash
-cd /home/eric/code/exercise/backend
+python3 manage.py migrate
+```
+*(Ensure your virtual environment is active)*
+
+### Create Superuser (Required for login)
+
+To access the Django admin interface, create a superuser:
+```bash
+python3 manage.py createsuperuser
+```
+*(Follow the prompts to set a username, email, and password)*
+
+### Running the Development Server
+
+Start the Django development server:
+```bash
+python3 manage.py runserver 8000
+```
+*(Ensure your virtual environment is active)*
+The API will be accessible at `http://localhost:8000/api/`.
+
+### Job Status Updates
+
+Job statuses (e.g., from 'scheduled' to 'active', or 'active' to 'expired') are updated via a script.
+
+**Manual Update:**
+To manually trigger the job status update process:
+```bash
+# Ensure you are in the /home/eric/code/exercise/backend directory
+# and the virtual environment is active.
+./update_job_status.sh
 ```
 
-2. **創建並啟動虛擬環境**
+**Log File:**
+The job status update script logs its activity to:
+`/home/eric/code/exercise/backend/job_status_scheduler.log`
+
+You can also trigger this via an API endpoint if authenticated (see API Endpoints section).
+
+## 🖥️ Frontend Setup & Usage
+
+The frontend is a Vue.js application built with Vite.
+
+### Recommended IDE Setup
+
+- [VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (ensure Vetur is disabled if previously used).
+
+### Type Support for `.vue` Imports in TypeScript
+
+TypeScript cannot handle type information for `.vue` imports by default. The project uses `vue-tsc` for type checking instead of `tsc`. For editor support, Volar is necessary to make the TypeScript language service aware of `.vue` types.
+
+### Customize Configuration
+
+For more advanced configuration options, see the [Vite Configuration Reference](https://vite.dev/config/).
+
+### Project Setup
+
+1.  **Navigate to the frontend directory:**
+    ```bash
+    cd /home/eric/code/exercise/frontend
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+
+### Compile and Hot-Reload for Development
+
+To run the frontend in development mode with hot-reloading:
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+npm run dev
 ```
+The frontend application will typically be accessible at `http://localhost:5173/` (Vite will show the exact URL).
 
-3. **安裝依賴套件**
+### Type-Check, Compile and Minify for Production
+
+To build the frontend for production (includes type-checking, compilation, and minification):
 ```bash
-pip install -r requirements.txt
+npm run build
 ```
+The production-ready files will be placed in the `dist` directory within `/home/eric/code/exercise/frontend`.
 
-4. **執行資料庫遷移**
-```bash
-source venv/bin/activate && python3 manage.py migrate
+## 📚 API Endpoints
+
+The backend provides the following API endpoints.
+
+### Authentication Endpoints
+| Method | Endpoint            | Description      | Auth Required |
+|--------|---------------------|------------------|---------------|
+| POST   | `/api/auth/login`   | User login       | ❌            |
+| POST   | `/api/auth/refresh` | Refresh JWT      | ❌            |
+
+### Job Management Endpoints
+| Method | Endpoint                  | Description             | Auth Required |
+|--------|---------------------------|-------------------------|---------------|
+| POST   | `/api/jobs`               | Create a new job        | ✅            |
+| GET    | `/api/jobs`               | Get list of jobs        | ✅            |
+| GET    | `/api/jobs/{id}`          | Get job details         | ✅            |
+| PUT    | `/api/jobs/{id}`          | Update a job            | ✅            |
+| DELETE | `/api/jobs/{id}`          | Delete a job            | ✅            |
+| POST   | `/api/jobs/update-status` | Manually update job statuses | ✅            |
+
+### Query Parameters for `GET /api/jobs`
+
+-   **Search**: `title`, `description`, `company_name`, `location`, `salary_range`
+-   **Filter**: `status` (active, expired, scheduled), `required_skills` (comma-separated)
+-   **Sort**: `order_by` (posting_date, -posting_date, expiration_date, -expiration_date)
+-   **Pagination**: Automatic, 10 items per page.
+
+**Example Queries:**
 ```
-
-5. **創建超級用戶 (可選)**
-```bash
-source venv/bin/activate && python3 manage.py createsuperuser
-```
-
-6. **啟動開發服務器**
-```bash
-source venv/bin/activate && python3 manage.py runserver 8000
-```
-
-## 📚 API 端點
-
-### 認證端點
-| 方法 | 端點 | 描述 | 認證需求 |
-|------|------|------|----------|
-| POST | `/api/auth/register` | 用戶註冊 | ❌ |
-| POST | `/api/auth/login` | 用戶登入 | ❌ |
-| POST | `/api/auth/refresh` | 刷新 Token | ❌ |
-
-### 職位管理端點
-| 方法 | 端點 | 描述 | 認證需求 |
-|------|------|------|----------|
-| POST | `/api/jobs` | 創建職位 | ✅ |
-| GET | `/api/jobs` | 取得職位列表 | ✅ |
-| GET | `/api/jobs/{id}` | 取得職位詳情 | ✅ |
-| PUT | `/api/jobs/{id}` | 更新職位 | ✅ |
-| DELETE | `/api/jobs/{id}` | 刪除職位 | ✅ |
-
-### 查詢參數
-
-#### GET /api/jobs 支援的參數：
-- **搜尋**: `title`, `description`, `company_name`, `location`, `salary_range`
-- **過濾**: `status` (active, expired, scheduled), `required_skills`
-- **排序**: `order_by` (posting_date, -posting_date, expiration_date, -expiration_date)
-- **分頁**: 自動分頁，每頁 10 筆
-
-#### 範例查詢：
-```bash
 GET /api/jobs?title=engineer&status=active&order_by=-posting_date
 GET /api/jobs?required_skills=Python,Django&location=Remote
 ```
 
-## 🗄️ 資料模型
+## 🗄️ Data Model (Job)
 
-### Job (職位)
-```python
+Example structure of a Job object:
+```json
 {
   "id": 1,
-  "title": "Software Engineer",           # 職位標題
-  "description": "Develop applications",  # 職位描述
-  "location": "Remote",                   # 工作地點
-  "salary_range": "100k-150k USD",       # 薪資範圍
-  "company_name": "Tech Corp",            # 公司名稱
-  "posting_date": "2025-01-01T00:00:00Z", # 發布日期
-  "expiration_date": "2025-02-01T00:00:00Z", # 到期日期
-  "required_skills": ["Python", "Django"], # 技能要求
-  "is_active": true,                      # 是否啟用
-  "is_scheduled": false,                  # 是否為排程職位
-  "status": "Active"                      # 職位狀態 (Active/Expired/Scheduled)
+  "title": "Software Engineer",
+  "description": "Develop applications",
+  "location": "Remote",
+  "salary_range": "100k-150k USD",
+  "company_name": "Tech Corp",
+  "posting_date": "2025-01-01T00:00:00Z",
+  "expiration_date": "2025-02-01T00:00:00Z",
+  "required_skills": ["Python", "Django"],
+  "is_active": true,
+  "is_scheduled": false,
+  "status": "Active" // (Active/Expired/Scheduled)
 }
 ```
 
-## 🔐 認證系統
+## 🔐 Authentication
 
-使用 JWT (JSON Web Token) 進行 API 認證：
+The API uses JWT (JSON Web Token) for authentication.
+1.  Log in via `/api/auth/login` to obtain an `access_token` and `refresh_token`.
+2.  Include the `access_token` in the `Authorization` header for protected requests: `Authorization: Bearer <access_token>`.
+3.  Use the `refresh_token` with `/api/auth/refresh` to get a new `access_token` when the current one expires.
 
-1. **註冊/登入**取得 access_token
-2. **在 HTTP Header 中包含**: `Authorization: Bearer <access_token>`
-3. **Token 過期時**使用 refresh_token 更新
+## 🧪 Testing
 
-## 🧪 測試
+### Backend Tests
 
-### 運行所有測試
+**Run all backend tests:**
 ```bash
-source venv/bin/activate && python3 -m pytest jobs/tests.py -v
-source venv/bin/activate && python3 -m pytest user_auth/tests.py -v
+# Ensure you are in the /home/eric/code/exercise/backend directory
+# and the virtual environment is active.
+python3 -m pytest jobs/tests.py -v
+python3 -m pytest user_auth/tests.py -v
 ```
 
-### 測試覆蓋範圍
-- ✅ **認證測試**: 註冊、登入、未認證訪問
-- ✅ **職位 CRUD 測試**: 創建、讀取、更新、刪除
-- ✅ **搜尋和過濾測試**: 各種查詢參數
-- ✅ **排程職位測試**: 排程邏輯驗證
-- ✅ **分頁測試**: 分頁功能驗證
-- ✅ **錯誤處理測試**: 各種錯誤狀況
+**Test File Descriptions:**
+-   `jobs/tests.py`: Core job management functionalities (CRUD, search, filter, pagination, scheduling).
+-   `user_auth/tests.py`: User authentication functionalities (login, token refresh).
 
-## 📖 API 文檔
+**Test Coverage Highlights:**
+-   Authentication: Login, token refresh, unauthorized access.
+-   Job CRUD: Create, Read, Update, Delete operations.
+-   Search & Filtering: Various query parameter combinations.
+-   Scheduled Jobs: Validation of scheduling logic.
+-   Pagination: Verification of paginated results.
+-   Error Handling: Testing for various error conditions.
+-   Job Status Updates: Automated and manual status update logic.
 
-啟動服務器後，可以在以下位置查看自動生成的 API 文檔：
+### Frontend Tests
+*(No automated frontend tests are currently configured in this project.)*
 
-- **Swagger UI**: http://127.0.0.1:8000/api/docs
-- **OpenAPI JSON**: http://127.0.0.1:8000/api/openapi.json
+## 📖 API Documentation
 
-## 🔧 開發工具
+Once the backend development server is running, API documentation is available at:
+-   **Swagger UI**: `http://127.0.0.1:8000/api/docs`
+-   **OpenAPI JSON**: `http://127.0.0.1:8000/api/openapi.json`
 
-### Django Admin
-訪問 Django Admin 管理介面：
+## 🛠️ Development Tools
+
+### Django Admin Interface
+Access the Django Admin for direct data management:
+1.  Ensure you have created a superuser (see Backend Setup).
+2.  Navigate to `http://127.0.0.1:8000/admin/` in your browser.
+
+### Database Management (Django)
+Common database commands:
 ```bash
-# 創建超級用戶
-source venv/bin/activate && python3 manage.py createsuperuser
+# Ensure virtual environment is active and you are in /home/eric/code/exercise/backend
+# Show migration status
+python3 manage.py showmigrations
 
-# 訪問 Admin: http://127.0.0.1:8000/admin/
+# Create new migration files (after model changes)
+python3 manage.py makemigrations
+
+# Apply migrations
+python3 manage.py migrate
 ```
 
-### 資料庫管理
-```bash
-# 檢視 migrations 狀態
-source venv/bin/activate && python3 manage.py showmigrations
+## 🚀 Deployment Considerations (Backend)
 
-# 生成新的 migrations
-source venv/bin/activate && python3 manage.py makemigrations
-
-# 執行 migrations
-source venv/bin/activate && python3 manage.py migrate
-```
-
-## 🚀 部署考量
-
-### 生產環境建議
-- 使用 PostgreSQL 替代 SQLite
-- 設定環境變數 (`DJANGO_SETTINGS_MODULE`, `SECRET_KEY`)
-- 使用 Gunicorn + Nginx
-- 啟用 HTTPS
-- 配置日誌系統
-
-### 環境變數範例
-```bash
-export DJANGO_SETTINGS_MODULE=job_platform.settings
-export SECRET_KEY=your-secret-key
-export DEBUG=False
-```
+For deploying the backend to a production environment:
+-   **Database**: Use a robust database like PostgreSQL instead of SQLite.
+-   **WSGI Server**: Use a production-grade WSGI server like Gunicorn or uWSGI.
+-   **Web Server/Proxy**: Place Nginx or Apache in front of the WSGI server to handle static files, SSL termination, and load balancing.
+-   **Environment Variables**: Manage settings like `DJANGO_SETTINGS_MODULE`, `SECRET_KEY`, `DEBUG` status, and database credentials using environment variables.
+    ```bash
+    export DJANGO_SETTINGS_MODULE=job_platform.settings
+    export SECRET_KEY='your-production-secret-key'
+    export DEBUG=False
+    # Add database connection variables
+    ```
+-   **HTTPS**: Enforce HTTPS for all communication.
+-   **Logging**: Configure comprehensive logging for monitoring and debugging.
+-   **Static Files**: Run `python3 manage.py collectstatic` and serve static files efficiently (e.g., via Nginx or a CDN).
+-   **Allowed Hosts**: Configure `ALLOWED_HOSTS` in `settings.py` to include your production domain(s).

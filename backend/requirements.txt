@@ -2,6 +2,7 @@ django
 djangorestframework
 django-ninja
 django-ninja-jwt
+django-crontab
 pytest
 pytest-django
 ruff

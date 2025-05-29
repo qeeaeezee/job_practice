@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from typing import Any
+import django.urls
 
 def monkeypatch_ninja_uuid_converter() -> None:
     """
@@ -10,8 +11,6 @@ def monkeypatch_ninja_uuid_converter() -> None:
     """
     import importlib
     import sys
-
-    import django.urls
 
     module_name = "ninja.signature.utils"
     sys.modules.pop(module_name, None)
@@ -54,24 +53,30 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes', 'on')
 ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
-  'django.contrib.admin',
-  'django.contrib.auth',
-  'django.contrib.contenttypes',
-  'django.contrib.sessions',
-  'django.contrib.messages',
-  'django.contrib.staticfiles',
-  'ninja_jwt',
-  'user_auth',
-  'jobs',
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'ninja',
+    'jobs',
+    'user_auth',
+    'corsheaders',
 ]
 
-# 中間件（最小必需）
+# 設定 crontab 日誌檔路徑
+CRONTAB_DJANGO_PROJECT_LOGS_PATH = '/home/eric/code/exercise/backend/'
+
 MIDDLEWARE = [
-  'django.middleware.security.SecurityMiddleware',
-  'django.contrib.sessions.middleware.SessionMiddleware',
-  'django.contrib.messages.middleware.MessageMiddleware',
-  'django.middleware.common.CommonMiddleware',
-  'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
 ROOT_URLCONF = 'job_platform.urls'
@@ -139,6 +144,12 @@ LOGGING = {
       'filename': 'debug.log',
       'formatter': 'verbose',
     },
+    'job_status_file': {
+      'level': 'INFO',
+      'class': 'logging.FileHandler',
+      'filename': 'job_status_scheduler.log',
+      'formatter': 'verbose',
+    },
   },
   'loggers': {
     'jobs': {
@@ -146,9 +157,39 @@ LOGGING = {
       'level': 'DEBUG',
       'propagate': True,
     },
+    'jobs.management.commands.update_job_status': {
+      'handlers': ['console', 'file', 'job_status_file'],
+      'level': 'INFO',
+      'propagate': False,
+    },
   },
   'root': {
     'handlers': ['console'],
     'level': 'WARNING',
   },
 }
+
+# CORS settings
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+# Optional: Allow all origins (less secure, for development only)
+# CORS_ALLOW_ALL_ORIGINS = True
+
+# Optional: Allow specific headers
+# CORS_ALLOW_HEADERS = [
+#     'authorization',
+#     'content-type',
+# ]
+
+# Optional: Allow specific methods
+# CORS_ALLOW_METHODS = [
+#     'DELETE',
+#     'GET',
+#     'OPTIONS',
+#     'PATCH',
+#     'POST',
+#     'PUT',
+# ]

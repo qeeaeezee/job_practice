@@ -1,4 +1,5 @@
 import logging
+import datetime
 from ninja import Router
 from ninja.pagination import paginate, PageNumberPagination
 from ninja.params import Query
@@ -6,6 +7,7 @@ from typing import List, Optional
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.utils import timezone
+from django.core.management import call_command
 
 from .models import Job
 from .schemas import JobSchema, JobCreateSchema, JobUpdateSchema, MessageSchema, JobFilterSchema, OrderSchema, JobListSchema
@@ -166,22 +168,52 @@ def update_job(request, job_id: int, payload: JobUpdateSchema):
     posting_date_payload_str = data.get("posting_date")
     posting_date_payload = None
     if posting_date_payload_str:
-        posting_date_payload = timezone.datetime.fromisoformat(posting_date_payload_str.replace("Z", "+00:00"))
+        try:
+            # 檢查是否為字串類型
+            if isinstance(posting_date_payload_str, str):
+                # 嘗試解析 ISO 格式日期字串
+                try:
+                    posting_date_payload = datetime.datetime.fromisoformat(posting_date_payload_str.replace("Z", "+00:00"))
+                    # 確保時間有時區信息
+                    if posting_date_payload.tzinfo is None:
+                        posting_date_payload = posting_date_payload.replace(tzinfo=datetime.timezone.utc)
+                except ValueError:
+                    # 如果無法解析為 ISO 格式，則使用當前時間
+                    logger.error(f"Invalid ISO format for posting_date: {posting_date_payload_str}")
+                    posting_date_payload = timezone.now()
+            elif isinstance(posting_date_payload_str, datetime.datetime):
+                # 如果已經是 datetime 對象，直接使用
+                posting_date_payload = posting_date_payload_str
+            else:
+                # 其他類型，使用當前時間
+                logger.error(f"Unsupported type for posting_date: {type(posting_date_payload_str)}")
+                posting_date_payload = timezone.now()
+        except Exception as e:
+            # 捕捉所有其他錯誤
+            logger.error(f"Error processing posting_date: {e}")
+            posting_date_payload = timezone.now()
 
+    now = timezone.now()
     if is_scheduled_payload is True:
+        # 如果沒有提供發布日期，使用現有的（如果存在）
         if not posting_date_payload:
-            data["posting_date"] = job.posting_date if job.posting_date else timezone.now()
-        elif posting_date_payload < timezone.now():
-            data["posting_date"] = timezone.now()
+            if job.posting_date and job.posting_date > now:
+                data["posting_date"] = job.posting_date
+            else:
+                # 如果要設為排程狀態，但沒提供未來的發布日期
+                return 400, {"message": "Scheduled job posting_date must be in the future"}
+        # 如果提供的發布日期已經過去，返回錯誤
+        elif posting_date_payload <= now:
+            return 400, {"message": "Scheduled job posting_date must be in the future"}
     elif is_scheduled_payload is False:
-        data["posting_date"] = timezone.now()
+        data["posting_date"] = now
         data["is_scheduled"] = False
     elif is_scheduled_payload is None and posting_date_payload:
-        if job.is_scheduled and posting_date_payload < timezone.now():
-            data["posting_date"] = timezone.now()
+        if job.is_scheduled and posting_date_payload < now:
+            data["posting_date"] = now
             data["is_scheduled"] = False
         elif not job.is_scheduled:
-             data["posting_date"] = timezone.now()
+            data["posting_date"] = now
     
     # Convert datetime objects back to isoformat strings if they were converted for comparison
     if "posting_date" in data and isinstance(data["posting_date"], timezone.datetime):
@@ -199,3 +231,54 @@ def delete_job(request, job_id: int):
     job = get_object_or_404(Job, id=job_id)
     job.delete()
     return 204, None
+
+@router.post("/update-status", response={200: MessageSchema}, auth=jwt_auth)
+def update_job_statuses(request):
+    """手動觸發更新所有職缺狀態"""
+    # 使用與命令相同的日誌記錄器，確保日誌一致性
+    status_logger = logging.getLogger('jobs.management.commands.update_job_status')
+    start_time = datetime.now()
+    
+    try:
+        now = timezone.now()
+        status_logger.info(f"手動API觸發更新職缺狀態，當前時間：{now}")
+        status_logger.info(f"執行環境時間：{start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # 處理已到期的職缺（無論之前是什麼狀態）
+        expired_jobs = Job.objects.filter(expiration_date__lt=now)
+        expired_count = expired_jobs.update(is_active=False, is_scheduled=False)
+        
+        # 處理排程中但已到發布時間的職缺
+        scheduled_jobs = Job.objects.filter(
+            is_scheduled=True,
+            posting_date__lte=now,
+            expiration_date__gt=now
+        )
+        scheduled_count = scheduled_jobs.update(is_active=True, is_scheduled=False)
+        
+        # 確保所有活躍的職缺狀態正確
+        active_jobs = Job.objects.filter(
+            posting_date__lte=now,
+            expiration_date__gt=now,
+            is_active=True
+        )
+        active_count = active_jobs.count()
+        
+        total_updated = expired_count + scheduled_count
+        
+        # 計算執行時間
+        execution_time = datetime.now() - start_time
+        
+        # 記錄到專用日誌
+        status_logger.info(f"職缺狀態更新完成 - 已過期: {expired_count}, 轉為活躍: {scheduled_count}, 執行時間: {execution_time.total_seconds():.3f}秒")
+        
+        # 一般日誌
+        logger.info(f"手動觸發更新職缺狀態: 共更新 {total_updated} 個職缺")
+        
+        return 200, {
+            "message": f"成功更新 {total_updated} 個職缺狀態：{expired_count} 個已過期，{scheduled_count} 個轉為活躍，目前共有 {active_count} 個活躍職缺"
+        }
+    except Exception as e:
+        status_logger.error(f"更新職缺狀態時發生錯誤: {str(e)}")
+        logger.error(f"更新職缺狀態時發生錯誤: {str(e)}")
+        return 200, {"message": f"更新職缺狀態時發生錯誤: {str(e)}"}
