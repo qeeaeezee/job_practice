@@ -90,10 +90,12 @@ export default {
     expiredJobNotActive: '已過期的職缺無法啟用',
     activeJobNoSchedule: '活躍的職缺無法重新排程',
     futureDateRequired: '排程職缺的發布日期必須在未來',
-    status: {
+    status: '職缺狀態',
+    statusTypes: {
       active: '活躍',
       scheduled: '排程',
-      expired: '已過期'
+      expired: '已過期',
+      inactive: '未啟用'
     },
     isActive: '啟用',
     salary: '薪資',

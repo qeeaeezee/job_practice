@@ -90,10 +90,12 @@ export default {
     titlePlaceholder: 'Enter job title',
     companyPlaceholder: 'Enter company name',
     descriptionPlaceholder: 'Describe the job responsibilities, requirements, benefits, etc.',
-    status: {
+    status: 'Job Status',
+    statusTypes: {
       active: 'Active',
       scheduled: 'Scheduled',
-      expired: 'Expired'
+      expired: 'Expired',
+      inactive: 'Inactive'
     },
     isActive: 'Active',
     salary: 'Salary',
