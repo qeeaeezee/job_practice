@@ -1,0 +1,4 @@
+# Django 環境變數設定
+DJANGO_SETTINGS_MODULE=job_platform.settings
+SECRET_KEY=your_secret_key_here
+DEBUG=False
